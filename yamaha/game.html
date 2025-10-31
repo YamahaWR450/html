@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Komplexes HTML5 Canvas Spiel: Pixel-Abenteuer</title>
+    <style>
+        /* --- CSS für das Styling --- */
+        body {
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: #4CAF50;
+            text-shadow: 2px 2px #000;
+        }
+
+        #gameContainer {
+            position: relative;
+            border: 4px solid #4CAF50;
+            box-shadow: 0 0 20px #4CAF50;
+        }
+
+        canvas {
+            background-color: #000;
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 24px;
+            pointer-events: none; /* Klicks gehen durch die UI zum Canvas */
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .overlay h2 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #FFD700;
+        }
+
+        .overlay p {
+            font-size: 20px;
+            max-width: 80%;
+        }
+
+        .overlay button {
+            padding: 15px 30px;
+            font-size: 24px;
+            background-color: #4CAF50;
+            border: 2px solid #f0f0f0;
+            color: #f0f0f0;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        .overlay button:hover {
+            background-color: #45a049;
+        }
+        .overlay button:active {
+            transform: scale(0.95);
+        }
+
+        #startScreen { display: flex; }
+        #gameOverScreen { display: none; }
+        #levelCompleteScreen { display: none; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Pixel-Abenteuer</h1>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <!-- UI Elemente -->
+        <div id="ui">
+            <div id="score">Punkte: 0</div>
+            <div id="level">Level: 1</div>
+            <div id="lives">Leben: 3</div>
+        </div>
+
+        <!-- Overlays für Spielzustände -->
+        <div id="startScreen" class="overlay">
+            <h2>Willkommen!</h2>
+            <p>Benutze die Pfeiltasten (← →) zum Bewegen und die Leertaste zum Springen. Sammle alle Münzen und erreiche das grüne Portal!</p>
+            <button id="startButton">Spiel starten</button>
+        </div>
+
+        <div id="gameOverScreen" class="overlay">
+            <h2>Game Over</h2>
+            <p>Du hast alle Leben verloren. Versuche es erneut!</p>
+            <button id="restartButton">Neustart</button>
+        </div>
+
+        <div id="levelCompleteScreen" class="overlay">
+            <h2 id="levelCompleteTitle">Level geschafft!</h2>
+            <p id="levelCompleteText">Gut gemacht! Bereit für das nächste Level?</p>
+            <button id="nextLevelButton">Nächstes Level</button>
+        </div>
+    </div>
+
+    <script>
+    // --- JavaScript für die Spiellogik ---
+
+    // 1. SETUP & VARIABLEN
+    // ======================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI-Elemente
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const levelEl = document.getElementById('level');
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const levelCompleteScreen = document.getElementById('levelCompleteScreen');
+    const levelCompleteTitle = document.getElementById('levelCompleteTitle');
+    const levelCompleteText = document.getElementById('levelCompleteText');
+    const startButton = document.getElementById('startButton');
+    const restartButton = document.getElementById('restartButton');
+    const nextLevelButton = document.getElementById('nextLevelButton');
+
+    // Spielkonstanten
+    const GRAVITY = 0.6;
+    const PLAYER_SPEED = 5;
+    const JUMP_FORCE = 15;
+
+    // Spielzustand
+    let score = 0;
+    let lives = 3;
+    let currentLevelIndex = 0;
+    let gameRunning = false;
+    let keys = {};
+
+    // Spielobjekte
+    let player;
+    let platforms = [];
+    let coins = [];
+    let enemies = [];
+    let goal;
+
+    // 2. KLASSEN & OBJEKTE
+    // ======================
+    class Player {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = 30;
+            this.height = 50;
+            this.dx = 0; // Geschwindigkeit X
+            this.dy = 0; // Geschwindigkeit Y
+            this.onGround = false;
+            this.color = '#4CAF50';
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+
+        update() {
+            // Horizontale Bewegung
+            if (keys['ArrowLeft']) {
+                this.dx = -PLAYER_SPEED;
+            } else if (keys['ArrowRight']) {
+                this.dx = PLAYER_SPEED;
+            } else {
+                this.dx = 0;
+            }
+            this.x += this.dx;
+
+            // Vertikale Bewegung (Schwerkraft)
+            this.dy += GRAVITY;
+            this.y += this.dy;
+            this.onGround = false;
+
+            // Kollision mit Canvas-Rändern
+            if (this.x < 0) this.x = 0;
+            if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+            if (this.y + this.height > canvas.height) {
+                this.y = canvas.height - this.height;
+                this.dy = 0;
+                this.onGround = true;
+            }
+        }
+
+        jump() {
+            if (this.onGround) {
+                this.dy = -JUMP_FORCE;
+                this.onGround = false;
+            }
+        }
+    }
+
+    class Platform {
+        constructor(x, y, width, height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.color = '#8B4513'; // Braun
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+    }
+
+    class Coin {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = 20;
+            this.height = 20;
+            this.color = '#FFD700'; // Gold
+            this.active = true;
+        }
+
+        draw() {
+            if (this.active) {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    class Enemy {
+        constructor(x, y, range) {
+            this.x = x;
+            this.y = y;
+            this.width = 30;
+            this.height = 30;
+            this.color = '#DC143C'; // Rot
+            this.startX = x;
+            this.endX = x + range;
+            this.speed = 2;
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+
+        update() {
+            this.x += this.speed;
+            if (this.x > this.endX || this.x < this.startX) {
+                this.speed *= -1;
+            }
+        }
+    }
+
+    class Goal {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = 40;
+            this.height = 60;
+            this.color = '#00FF00'; // Hellgrün
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(this.x + 5, this.y + 5, this.width - 10, this.height - 10);
+        }
+    }
+
+    // 3. LEVEL-DATEN
+    // ======================
+    const levels = [
+        { // Level 1
+            playerStart: { x: 50, y: 500 },
+            platforms: [
+                new Platform(0, 580, 800, 20),
+                new Platform(150, 480, 150, 20),
+                new Platform(400, 400, 200, 20),
+                new Platform(200, 300, 100, 20),
+                new Platform(550, 250, 150, 20)
+            ],
+            coins: [
+                new Coin(180, 450), new Coin(450, 370), new Coin(230, 270), new Coin(600, 220)
+            ],
+            enemies: [
+                new Enemy(400, 370, 170)
+            ],
+            goal: new Goal(740, 190)
+        },
+        { // Level 2
+            playerStart: { x: 20, y: 50 },
+            platforms: [
+                new Platform(0, 580, 800, 20),
+                new Platform(0, 100, 150, 20),
+                new Platform(250, 180, 100, 20),
+                new Platform(450, 250, 100, 20),
+                new Platform(200, 350, 150, 20),
+                new Platform(500, 450, 200, 20),
+                new Platform(100, 500, 100, 20)
+            ],
+            coins: [
+                new Coin(275, 150), new Coin(475, 220), new Coin(250, 320), new Coin(550, 420), new Coin(120, 470)
+            ],
+            enemies: [
+                new Enemy(200, 320, 120),
+                new Enemy(500, 420, 170)
+            ],
+            goal: new Goal(750, 520)
+        }
+    ];
+
+    // 4. SPIELFUNKTIONEN
+    // ======================
+    function loadLevel(levelIndex) {
+        const levelData = levels[levelIndex];
+        player = new Player(levelData.playerStart.x, levelData.playerStart.y);
+        platforms = levelData.platforms;
+        coins = levelData.coins.map(c => new Coin(c.x, c.y)); // Kopien erstellen
+        enemies = levelData.enemies.map(e => new Enemy(e.x, e.y, e.endX - e.startX)); // Kopien erstellen
+        goal = levelData.goal;
+        updateUI();
+    }
+
+    function resetPlayer() {
+        lives--;
+        updateUI();
+        if (lives <= 0) {
+            gameOver();
+        } else {
+            player.x = levels[currentLevelIndex].playerStart.x;
+            player.y = levels[currentLevelIndex].playerStart.y;
+            player.dx = 0;
+            player.dy = 0;
+        }
+    }
+
+    function updateUI() {
+        scoreEl.textContent = `Punkte: ${score}`;
+        livesEl.textContent = `Leben: ${lives}`;
+        levelEl.textContent = `Level: ${currentLevelIndex + 1}`;
+    }
+
+    function checkCollisions() {
+        // Spieler vs. Plattformen
+        platforms.forEach(platform => {
+            if (player.x < platform.x + platform.width &&
+                player.x + player.width > platform.x &&
+                player.y < platform.y + platform.height &&
+                player.y + player.height > platform.y) {
+                
+                // Kollision von oben
+                if (player.dy > 0 && player.y + player.height - player.dy <= platform.y) {
+                    player.y = platform.y - player.height;
+                    player.dy = 0;
+                    player.onGround = true;
+                }
+                // Kollision von unten
+                else if (player.dy < 0 && player.y - player.dy >= platform.y + platform.height) {
+                    player.y = platform.y + platform.height;
+                    player.dy = 0;
+                }
+                // Kollision von der Seite
+                else if (player.dx !== 0) {
+                    player.x -= player.dx;
+                }
+            }
+        });
+
+        // Spieler vs. Münzen
+        coins.forEach(coin => {
+            if (coin.active &&
+                player.x < coin.x + coin.width &&
+                player.x + player.width > coin.x &&
+                player.y < coin.y + coin.height &&
+                player.y + player.height > coin.y) {
+                coin.active = false;
+                score += 10;
+                updateUI();
+            }
+        });
+
+        // Spieler vs. Gegner
+        enemies.forEach(enemy => {
+            if (player.x < enemy.x + enemy.width &&
+                player.x + player.width > enemy.x &&
+                player.y < enemy.y + enemy.height &&
+                player.y + player.height > enemy.y) {
+                resetPlayer();
+            }
+        });
+
+        // Spieler vs. Ziel
+        if (player.x < goal.x + goal.width &&
+            player.x + player.width > goal.x &&
+            player.y < goal.y + goal.height &&
+            player.y + player.height > goal.y) {
+            levelComplete();
+        }
+    }
+
+    function levelComplete() {
+        gameRunning = false;
+        currentLevelIndex++;
+        if (currentLevelIndex >= levels.length) {
+            levelCompleteTitle.textContent = "Sieg!";
+            levelCompleteText.textContent = `Du hast alle Level mit ${score} Punkten abgeschlossen!`;
+            nextLevelButton.textContent = "Nochmal spielen";
+        } else {
+            levelCompleteTitle.textContent = "Level geschafft!";
+            levelCompleteText.textContent = "Gut gemacht! Bereit für das nächste Level?";
+            nextLevelButton.textContent = "Nächstes Level";
+        }
+        levelCompleteScreen.style.display = 'flex';
+    }
+
+    function gameOver() {
+        gameRunning = false;
+        gameOverScreen.style.display = 'flex';
+    }
+
+    function init() {
+        score = 0;
+        lives = 3;
+        currentLevelIndex = 0;
+        loadLevel(currentLevelIndex);
+        startScreen.style.display = 'none';
+        gameOverScreen.style.display = 'none';
+        levelCompleteScreen.style.display = 'none';
+        gameRunning = true;
+        gameLoop();
+    }
+
+    // 5. GAME LOOP
+    // ======================
+    function gameLoop() {
+        if (!gameRunning) return;
+
+        // 1. Update
+        player.update();
+        enemies.forEach(enemy => enemy.update());
+        checkCollisions();
+
+        // 2. Draw
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        platforms.forEach(p => p.draw());
+        coins.forEach(c => c.draw());
+        enemies.forEach(e => e.draw());
+        goal.draw();
+        player.draw();
+
+        // 3. Nächsten Frame anfordern
+        requestAnimationFrame(gameLoop);
+    }
+
+    // 6. EVENT LISTENERS
+    // ======================
+    window.addEventListener('keydown', (e) => {
+        keys[e.code] = true;
+        if (e.code === 'Space') {
+            player.jump();
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        keys[e.code] = false;
+    });
+
+    startButton.addEventListener('click', init);
+    restartButton.addEventListener('click', init);
+    nextLevelButton.addEventListener('click', () => {
+        if (currentLevelIndex >= levels.length) {
+            init(); // Spiel von vorne beginnen
+        } else {
+            loadLevel(currentLevelIndex);
+            levelCompleteScreen.style.display = 'none';
+            gameRunning = true;
+            gameLoop();
+        }
+    });
+
+    </script>
+
+</body>
+</html>
