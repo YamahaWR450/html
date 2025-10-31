@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einfache To-Do App</title>
+    <style>
+        /* === CSS für das Styling === */
+        
+        /* Grundlegende Stile für die ganze Seite */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding-top: 40px;
+        }
+
+        /* Der Hauptcontainer für die App */
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        /* Überschrift */
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 25px;
+        }
+
+        /* Bereich für Eingabefeld und Button */
+        .input-bereich {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* Das Texteingabefeld */
+        #taskInput {
+            flex-grow: 1; /* Nimmt den meisten Platz ein */
+            padding: 12px;
+            border: 2px solid #dfe6e9;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        #taskInput:focus {
+            outline: none;
+            border-color: #0984e3;
+        }
+
+        /* Der "Hinzufügen"-Button */
+        #addButton {
+            padding: 12px 20px;
+            background-color: #0984e3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #addButton:hover {
+            background-color: #005cbf;
+        }
+
+        /* Die Liste der Aufgaben */
+        #taskList {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        /* Einzelne Aufgaben in der Liste */
+        #taskList li {
+            background-color: #fdfdfd;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            word-break: break-word; /* Verhindert, dass lange Wörter überlaufen */
+        }
+
+        #taskList li:last-child {
+            border-bottom: none;
+        }
+
+        /* Stil für eine erledigte Aufgabe */
+        #taskList li.erledigt {
+            text-decoration: line-through;
+            color: #b2bec3;
+        }
+        
+        #taskList li.erledigt .task-text {
+            opacity: 0.7;
+        }
+
+        /* Der Löschen-Button */
+        .delete-btn {
+            background-color: #d63031;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: 15px;
+            flex-shrink: 0; /* Verhindert, dass der Button schrumpft */
+            transition: background-color 0.3s;
+        }
+
+        .delete-btn:hover {
+            background-color: #a22425;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- === HTML für die Struktur === -->
+    <div class="container">
+        <h1>Meine To-Do Liste</h1>
+        <div class="input-bereich">
+            <input type="text" id="taskInput" placeholder="Neue Aufgabe hinzufügen...">
+            <button id="addButton">Hinzufügen</button>
+        </div>
+        <ul id="taskList">
+            <!-- Aufgaben werden hier per JavaScript eingefügt -->
+        </ul>
+    </div>
+
+    <script>
+        // === JavaScript für die Funktionalität ===
+
+        // 1. Wichtige HTML-Elemente holen
+        const taskInput = document.getElementById('taskInput');
+        const addButton = document.getElementById('addButton');
+        const taskList = document.getElementById('taskList');
+
+        // 2. Event-Listener hinzufügen
+        // Beim Laden der Seite: Gespeicherte Aufgaben laden
+        document.addEventListener('DOMContentLoaded', loadTasks);
+        // Beim Klick auf den "Hinzufügen"-Button: Aufgabe hinzufügen
+        addButton.addEventListener('click', addTask);
+        // Bei Drücken der Enter-Taste im Eingabefeld: Aufgabe hinzufügen
+        taskInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                addTask();
+            }
+        });
+        // Beim Klick auf die Aufgabenliste (um Aufgaben zu erledigen oder zu löschen)
+        taskList.addEventListener('click', handleTaskClick);
+
+        // 3. Funktionen
+
+        /**
+         * Fügt eine neue Aufgabe zur Liste hinzu.
+         */
+        function addTask() {
+            const taskText = taskInput.value.trim(); // .trim() entfernt Leerzeichen am Anfang/Ende
+
+            // Nur hinzufügen, wenn Text vorhanden ist
+            if (taskText === '') {
+                alert('Bitte gib eine Aufgabe ein.');
+                return;
+            }
+
+            // Erstelle das Listenelement (<li>)
+            const li = createTaskElement(taskText);
+            
+            // Füge das neue Element zur Liste hinzu
+            taskList.appendChild(li);
+
+            // Leere das Eingabefeld
+            taskInput.value = '';
+
+            // Speichere alle Aufgaben im Browser
+            saveTasks();
+        }
+        
+        /**
+         * Erstellt das HTML für eine einzelne Aufgabe.
+         */
+        function createTaskElement(text, isCompleted = false) {
+            const li = document.createElement('li');
+            if (isCompleted) {
+                li.classList.add('erledigt');
+            }
+
+            // Span für den Text, damit der Klick auf den Text und den Button getrennt ist
+            const taskTextSpan = document.createElement('span');
+            taskTextSpan.textContent = text;
+            taskTextSpan.classList.add('task-text');
+            li.appendChild(taskTextSpan);
+
+            // Erstelle den Löschen-Button
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'X';
+            deleteButton.className = 'delete-btn';
+            li.appendChild(deleteButton);
+            
+            return li;
+        }
+
+        /**
+         * Verarbeitet Klicks auf der Aufgabenliste (Erledigen/Löschen).
+         */
+        function handleTaskClick(event) {
+            const clickedElement = event.target;
+
+            // Wenn der Löschen-Button geklickt wurde
+            if (clickedElement.classList.contains('delete-btn')) {
+                const li = clickedElement.parentElement;
+                taskList.removeChild(li);
+            }
+            // Wenn das Listenelement (oder der Text darin) geklickt wurde
+            else if (clickedElement.tagName === 'LI' || clickedElement.classList.contains('task-text')) {
+                const li = clickedElement.closest('li'); // Finde das übergeordnete <li>
+                li.classList.toggle('erledigt');
+            }
+            
+            // Speichere die Änderungen
+            saveTasks();
+        }
+
+        /**
+         * Speichert alle aktuellen Aufgaben im Local Storage des Browsers.
+         */
+        function saveTasks() {
+            const tasks = [];
+            // Gehe durch alle <li> Elemente in der Liste
+            taskList.querySelectorAll('li').forEach(li => {
+                tasks.push({
+                    text: li.querySelector('.task-text').textContent,
+                    completed: li.classList.contains('erledigt')
+                });
+            });
+            // Speichere das Array als Text (JSON-String)
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        /**
+         * Lädt die Aufgaben aus dem Local Storage, wenn die Seite geöffnet wird.
+         */
+        function loadTasks() {
+            const savedTasks = localStorage.getItem('tasks');
+
+            if (savedTasks) {
+                const tasks = JSON.parse(savedTasks);
+                tasks.forEach(task => {
+                    const li = createTaskElement(task.text, task.completed);
+                    taskList.appendChild(li);
+                });
+            }
+        }
+    </script>
+
+</body>
+</html>
